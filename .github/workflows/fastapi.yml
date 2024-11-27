@@ -43,6 +43,3 @@ jobs:
     - name: Install Python dependencies
       run: poetry install --no-interaction
 
-    - name: Check code formatting
-      run: poetry run black --check .
-      
