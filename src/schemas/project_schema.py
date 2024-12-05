@@ -1,5 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 from typing import Dict
+
+from pydantic import BaseModel, ConfigDict
+
 
 class ProjectStatisticSchema(BaseModel):
     model_config = ConfigDict(strict=True)

@@ -1,5 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 from typing import Dict
+
+from pydantic import BaseModel, ConfigDict
+
 
 class UserStatisticSchema(BaseModel):
     model_config = ConfigDict(strict=True)
@@ -9,6 +11,7 @@ class UserStatisticSchema(BaseModel):
     tasks_by_status: Dict[str, int]
     tasks_completed_last_week: int
     average_task_completion_time: float
+
 
 class UserStaticProjectSchema(BaseModel):
     model_config = ConfigDict(strict=True)
