@@ -15,7 +15,6 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     client = get_mongo_client()
-    logger.info("бла бла бла сраный стартап запущен")
     await start_listen(client)
 
 
