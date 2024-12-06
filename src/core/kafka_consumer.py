@@ -65,10 +65,22 @@ class KafkaConsumer:
 
             event_type = event.get("event_type")
             task_data = event.get("task_data")
+
+            if task_data:
+                logger.info("Received task_data: %s", task_data)
+            else:
+                logger.info("Didn't receive task data'")
+
             project_id = task_data.get("project_id")
             task_status = task_data.get("status")
+            task_user_id = task_data.get("user_id")
 
-            if event_type == "task_created":
+            if task_user_id is None:
+                logging.error("Missing user_id in message: %s", event)
+                return
+            logger.info("Received user_id: %s", task_user_id)
+
+            if event_type in ["task_created", "task_updated"]:
                 logger.info(
                     "Updating statistics for project_id: %s, status: %s",
                     project_id,
@@ -77,9 +89,24 @@ class KafkaConsumer:
                 await self.db.save_or_update_user_statistic(
                     project_id, task_status
                 )
+                await self.db.save_or_update_user_static_new(
+                    task_user_id, project_id
+                )
                 logger.info(
                     "Statistics updated for project_id: %s", project_id
                 )
+
+            elif event_type == "task_deleted":
+                logger.info(
+                    "Deleting static for task_id: %s", task_data["task_id"]
+                )
+                await self.db.delete_user_statics_for_task(
+                    project_id, task_data["task_id"]
+                )
+                logger.info(
+                    "Statics deleted for task_id: %s", task_data["task_id"]
+                )
+
         except json.JSONDecodeError as e:
             logger.error("JSON decode error: %s", e)
         except KafkaError as e:

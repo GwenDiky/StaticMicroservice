@@ -2,7 +2,7 @@ import motor.motor_asyncio
 from fastapi import Depends
 
 from src.core.config import settings
-from src.services import static_service
+from src.services import user_static_service as static_service
 
 
 def get_mongo_client() -> motor.motor_asyncio.AsyncIOMotorClient:
