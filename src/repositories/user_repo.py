@@ -6,10 +6,6 @@ from src.schemas.user_schema import UserStatisticSchema
 
 class AbstractStaticsRepository(ABC):
     @abstractmethod
-    async def delete_user_statics_for_task(self, project_id, task_id):
-        raise NotImplementedError
-
-    @abstractmethod
     async def save_or_update_user_statistic(self, project_id, task_status):
         raise NotImplementedError
 
@@ -37,10 +33,4 @@ class AbstractStaticsRepository(ABC):
     async def calculate_average_task_completion_time(
         self, tasks: List[Dict]
     ) -> float:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def save_or_update_user_static_new(
-        self, user_id: int, project_id: int
-    ):
         raise NotImplementedError

@@ -6,7 +6,6 @@ from typing import Dict, List
 import motor.motor_asyncio
 from bson.errors import InvalidId
 from bson.objectid import ObjectId
-from pydantic import ValidationError
 from pymongo.errors import OperationFailure
 
 from src import exceptions
@@ -29,43 +28,6 @@ class UserStatisticService(AbstractStaticsRepository):
         self.client = client
         self.db = self.client.get_database("statics")
         self.collection = self.db["user_statics"]
-
-    async def delete_user_statics_for_task(self, project_id, task_id):
-        try:
-            logging.info("Removed task %s from static", task_id)
-            project = await self.collection.find_one(
-                {"project_id": project_id}
-            )
-            if not project:
-                logging.warning("Project with id %s not found", project_id)
-                return
-
-            update_result = await self.collection.update.one(
-                {
-                    "project_id": project_id,
-                },
-                {
-                    "$unset": {f"tasks_by_status.{task_id}": ""},
-                    "$inc": {"total_tasks": -1},
-                },
-            )
-
-            if update_result.modified_count > 0:
-                logging.info(
-                    "Task %s removed from project %s successfully",
-                    task_id,
-                    project_id,
-                )
-            else:
-                logging.warning(
-                    "No changes made while removing task %s from project %s",
-                    task_id,
-                    project_id,
-                )
-
-        except OperationFailure as e:
-            logging.error("Error updating project statistic: %s", e)
-            raise exceptions.DatabaseUpdateError
 
     async def save_or_update_user_statistic(
         self, project_id: int, task_status: str
@@ -196,13 +158,9 @@ class UserStatisticService(AbstractStaticsRepository):
         completed_tasks = [
             task
             for task in tasks
-            if (
-                task.get("status") == StatusChoices.DONE
-                or task.get("status") == "Done"
-            )
+            if task.get("status") == "done"
             and task.get("updated_at") >= one_week_ago
         ]
-
         return len(completed_tasks)
 
     async def calculate_average_task_completion_time(
@@ -212,88 +170,18 @@ class UserStatisticService(AbstractStaticsRepository):
             task
             for task in tasks
             if (
-                task.get("status") == StatusChoices.DONE
-                or task.get("status") == "Done"
+                task.get("status") in {StatusChoices.DONE, "Done"}
+                and isinstance(task.get("created_at"), datetime)
+                and isinstance(task.get("updated_at"), datetime)
             )
-            and task.get("created_at")
-            and task.get("updated_at")
         ]
 
         if not completed_tasks:
-            return 0
+            return 0.0
 
         total_time = sum(
-            task.get("updated_at") - task.get("created_at")
+            (task["updated_at"] - task["created_at"]).total_seconds()
             for task in completed_tasks
         )
+
         return total_time / len(completed_tasks)
-
-    async def save_or_update_user_static_new(
-        self, user_id: int, project_id: int
-    ):
-        try:
-            logging.info("Updating user statistics for user_id: %s", user_id)
-
-            tasks = await self.get_tasks_for_user(user_id)
-
-            total_projects = await self.calculate_total_projects(tasks)
-
-            for task in tasks:
-                if task.get("project_id") is None:
-                    logging.info("There isn't project_id in task: %s", task)
-                    return
-
-            if project_id and project_id not in {
-                task["project_id"] for task in tasks
-            }:
-                total_projects += 1
-
-            tasks_completed_last_week = (
-                await self.calculate_tasks_completed_last_week(tasks)
-            )
-            average_task_completion_time = (
-                await self.calculate_average_task_completion_time(tasks)
-            )
-
-            user_id = int(user_id)
-
-            if not isinstance(user_id, int):
-                logging.error(
-                    "Invalid user_id type: %s. Expected integer.",
-                    {type(user_id)},
-                )
-                raise ValueError(
-                    f"Invalid user_id type: {type(user_id)}. Expected "
-                    f"integer.",
-                )
-
-            try:
-                UserStatisticSchema(
-                    user_id=user_id,
-                    total_projects=total_projects,
-                    tasks_completed_last_week=tasks_completed_last_week,
-                    average_task_completion_time=average_task_completion_time,
-                )
-            except ValidationError as e:
-                logging.error("Validation error: %s", {e.json()})
-                raise
-
-            await self.collection.update_one(
-                {"user_id": user_id},
-                {
-                    "$set": {
-                        "total_projects": total_projects,
-                        "tasks_completed_last_week": tasks_completed_last_week,
-                        "average_task_completion_time": average_task_completion_time,
-                    }
-                },
-                upsert=True,
-            )
-
-            logging.info("User statistics updated for user_id: %s", user_id)
-
-        except OperationFailure as e:
-            logging.error(
-                "Error updating user statistics for user_id %s: %s", user_id, e
-            )
-            raise exceptions.DatabaseUpdateError

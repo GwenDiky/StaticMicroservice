@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 class KafkaConsumer:
     def __init__(
         self,
-        db,
+        user_db,
+        project_db,
+        user_project_db,
         bootstrap_servers="kafka:9092",
         group_id="task-consumer-group",
         topic="tasks",
@@ -20,7 +22,9 @@ class KafkaConsumer:
         self.bootstrap_servers = bootstrap_servers
         self.group_id = group_id
         self.topic = topic
-        self.db = db
+        self.user_db = user_db
+        self.project_db = project_db
+        self.user_project_db = user_project_db
 
     async def consume_messages(self):
         logger.debug(
@@ -86,11 +90,16 @@ class KafkaConsumer:
                     project_id,
                     task_status,
                 )
-                await self.db.save_or_update_user_statistic(
+                await self.user_db.save_or_update_user_statistic(
                     project_id, task_status
                 )
-                await self.db.save_or_update_user_static_new(
-                    task_user_id, project_id
+                await self.project_db.save_or_update_project_statistic(
+                    project_id=project_id, task_status=task_status
+                )
+                await self.user_project_db.update_task(
+                    user_id=task_user_id,
+                    project_id=project_id,
+                    status=task_status,
                 )
                 logger.info(
                     "Statistics updated for project_id: %s", project_id
@@ -100,7 +109,7 @@ class KafkaConsumer:
                 logger.info(
                     "Deleting static for task_id: %s", task_data["task_id"]
                 )
-                await self.db.delete_user_statics_for_task(
+                await self.user_db.delete_user_statics_for_task(
                     project_id, task_data["task_id"]
                 )
                 logger.info(
