@@ -75,69 +75,84 @@ class ProjectStatisticService(AbstractProjectStaticsRepository):
             logger.error("Error updating project statistic: %s", e)
             raise exceptions.DatabaseUpdateError
 
-    async def save_or_update_project_statistic(
-        self, project_id: int, task_status: str
-    ):
+    from collections import defaultdict
+    from fastapi import HTTPException
+    from pymongo.errors import OperationFailure
+
+    async def save_or_update_project_statistic(self, project_id: int,
+                                               task_status: str):
         try:
-            logger.info(
-                "Updating statistics for project %s with status %s",
-                project_id,
-                task_status,
-            )
+            logger.info("Updating statistics for project %s with status %s",
+                        project_id, task_status)
 
             project = await self.collection.find_one(
-                {"project_id": project_id}
-            )
+                {"project_id": project_id})
 
             if not project:
-                tasks_by_status = {"in_progress": 0, "done": 0, "to_do": 0}
-                tasks_by_status[task_status] = 1
+                await self.create_new_project_statistic(project_id,
+                                                        task_status)
+            else:
+                await self.update_existing_project_statistic(project,
+                                                             task_status)
 
-                new_project_stat = ProjectStatisticSchema(
-                    project_id=project_id,
-                    total_tasks=1,
-                    total_user=1,
-                    tasks_by_status=tasks_by_status,
-                    average_task_completion_time=0.0,
-                )
-
-                await self.collection.update_one(
-                    {"project_id": project_id},
-                    {"$setOnInsert": new_project_stat.dict()},
-                    upsert=True,
-                )
-                return
-
-            tasks_by_status = project["tasks_by_status"]
-            tasks_by_status[task_status] += 1
-            total_tasks = project["total_tasks"] + 1
-
-            completed_tasks = await self.collection.find(
-                {"project_id": project_id, "status": "done"}
-            ).to_list(None)
-
-            total_time = sum(
-                (task["updated_at"] - task["created_at"]).total_seconds()
-                for task in completed_tasks
-            )
-            average_task_completion_time = (
-                total_time / len(completed_tasks) if completed_tasks else 0.0
-            )
-
-            logger.info("Tasks by statuses: %s", tasks_by_status)
-
-            updated_project_stat = ProjectStatisticSchema(
-                project_id=project_id,
-                total_tasks=total_tasks,
-                total_user=project["total_user"],
-                tasks_by_status=tasks_by_status,
-                average_task_completion_time=average_task_completion_time,
-            )
-
-            await self.collection.update_one(
-                {"project_id": project_id},
-                {"$set": updated_project_stat.dict()},
-            )
         except OperationFailure as e:
             logger.error("Error updating project statistic: %s", e)
-            raise exceptions.DatabaseUpdateError
+            raise HTTPException(status_code=500,
+                                detail="Database update error")
+
+    async def create_new_project_statistic(self, project_id: int,
+                                           task_status: str):
+        tasks_by_status = defaultdict(int)
+        tasks_by_status[task_status] = 1
+
+        new_project_stat = ProjectStatisticSchema(
+            project_id=project_id,
+            total_tasks=1,
+            total_user=1,
+            tasks_by_status=dict(tasks_by_status),
+            average_task_completion_time=0.0,
+        )
+
+        await self.collection.update_one(
+            {"project_id": project_id},
+            {"$setOnInsert": new_project_stat.dict()},
+            upsert=True,
+        )
+
+    async def update_existing_project_statistic(self, project,
+                                                task_status: str):
+        tasks_by_status = project["tasks_by_status"]
+        tasks_by_status[task_status] += 1
+        total_tasks = project["total_tasks"] + 1
+
+        completed_tasks = await self.collection.find(
+            {"project_id": project["project_id"], "status": "done"}
+        ).to_list(None)
+
+        average_task_completion_time = self.calculate_average_completion_time(
+            completed_tasks)
+
+        logger.info("Tasks by statuses: %s", tasks_by_status)
+
+        updated_project_stat = ProjectStatisticSchema(
+            project_id=project["project_id"],
+            total_tasks=total_tasks,
+            total_user=project["total_user"],
+            tasks_by_status=tasks_by_status,
+            average_task_completion_time=average_task_completion_time,
+        )
+
+        await self.collection.update_one(
+            {"project_id": project["project_id"]},
+            {"$set": updated_project_stat.dict()},
+        )
+
+    def calculate_average_completion_time(self, completed_tasks):
+        if not completed_tasks:
+            return 0.0
+
+        total_time = sum(
+            (task["updated_at"] - task["created_at"]).total_seconds()
+            for task in completed_tasks
+        )
+        return total_time / len(completed_tasks)

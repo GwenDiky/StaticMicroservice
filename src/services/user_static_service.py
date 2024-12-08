@@ -29,92 +29,92 @@ class UserStatisticService(AbstractStaticsRepository):
         self.db = self.client.get_database("statics")
         self.collection = self.db["user_statics"]
 
-    async def save_or_update_user_statistic(
-        self, project_id: int, task_status: str
-    ):
+    import logging
+    from pymongo.errors import OperationFailure
+    from fastapi import HTTPException
+
+    async def save_or_update_user_statistic(self, project_id: int,
+                                            task_status: str):
         try:
-            logging.info(
-                "Updating statistics for project %s with status %s",
-                project_id,
-                task_status,
-            )
+            logging.info("Updating statistics for project %s with status %s",
+                         project_id, task_status)
 
             project = await self.collection.find_one(
-                {"project_id": project_id}
-            )
+                {"project_id": project_id})
 
             if not project:
-                logging.info(
-                    "New project statistics created for project_id %s",
-                    project_id,
-                )
-
-                tasks_by_status = {"in_progress": 0, "done": 0, "to_do": 0}
-                total_tasks = 1
-                new_project_stat = ProjectStatisticSchema(
-                    project_id=project_id,
-                    total_tasks=total_tasks,
-                    total_user=1,
-                    tasks_by_status=tasks_by_status,
-                    average_task_completion_time=0.0,
-                )
-
-                update_result = await self.collection.update_one(
-                    {"project_id": project_id},
-                    {"$setOnInsert": new_project_stat.dict()},
-                    upsert=True,
-                )
-
-                if update_result.upserted_id:
-                    logging.info(
-                        "New project statistics created for project_id %s",
-                        project_id,
-                    )
-                return
-
-            tasks_by_status = project.get(
-                "tasks_by_status", {"in_progress": 0, "done": 0, "to_do": 0}
-            )
-            total_tasks = project.get("total_tasks", 0) + 1
-
-            if task_status in tasks_by_status:
-                tasks_by_status[task_status] += 1
+                await self.create_new_project_statistic(project_id)
             else:
-                logging.warning(
-                    "Invalid task status: %s. Ignoring update.", task_status
-                )
-                raise exceptions.InvalidTaskStatusError
-
-            average_task_completion_time = project.get(
-                "average_task_completion_time", 0.0
-            )
-
-            updated_project_stat = ProjectStatisticSchema(
-                project_id=project_id,
-                total_tasks=total_tasks,
-                total_user=project.get("total_user", 0),
-                tasks_by_status=tasks_by_status,
-                average_task_completion_time=average_task_completion_time,
-            )
-
-            update_result = await self.collection.update_one(
-                {"project_id": project_id},
-                {"$set": updated_project_stat.dict()},
-            )
-
-            if update_result.matched_count > 0:
-                logging.info(
-                    "Project statistics updated for project_id %s", project_id
-                )
-            else:
-                logging.info(
-                    "New project statistics created for project_id %s",
-                    project_id,
-                )
+                await self.update_existing_project_statistic(project,
+                                                             task_status,
+                                                             project_id)
 
         except OperationFailure as e:
             logging.error("Error updating project statistic: %s", e)
-            raise exceptions.DatabaseUpdateError
+            raise HTTPException(status_code=500,
+                                detail="Database update error")
+
+    async def create_new_project_statistic(self, project_id: int):
+        logging.info("New project statistics created for project_id %s",
+                     project_id)
+
+        tasks_by_status = {"in_progress": 0, "done": 0, "to_do": 0}
+        new_project_stat = ProjectStatisticSchema(
+            project_id=project_id,
+            total_tasks=1,
+            total_user=1,
+            tasks_by_status=tasks_by_status,
+            average_task_completion_time=0.0,
+        )
+
+        update_result = await self.collection.update_one(
+            {"project_id": project_id},
+            {"$setOnInsert": new_project_stat.dict()},
+            upsert=True,
+        )
+
+        if update_result.upserted_id:
+            logging.info("New project statistics created for project_id %s",
+                         project_id)
+
+    async def update_existing_project_statistic(self, project,
+                                                task_status: str,
+                                                project_id: int):
+        tasks_by_status = project.get("tasks_by_status",
+                                      {"in_progress": 0, "done": 0,
+                                       "to_do": 0})
+        total_tasks = project.get("total_tasks", 0) + 1
+
+        if task_status in tasks_by_status:
+            tasks_by_status[task_status] += 1
+        else:
+            logging.warning("Invalid task status: %s. Ignoring update.",
+                            task_status)
+            raise exceptions.InvalidTaskStatusError
+
+        average_task_completion_time = project.get(
+            "average_task_completion_time", 0.0)
+
+        updated_project_stat = ProjectStatisticSchema(
+            project_id=project_id,
+            total_tasks=total_tasks,
+            total_user=project.get("total_user", 0),
+            tasks_by_status=tasks_by_status,
+            average_task_completion_time=average_task_completion_time,
+        )
+
+        update_result = await self.collection.update_one(
+            {"project_id": project_id},
+            {"$set": updated_project_stat.dict()},
+        )
+
+        if update_result.matched_count > 0:
+            logging.info("Project statistics updated for project_id %s",
+                         project_id)
+        else:
+            logging.info(
+                "No existing project statistics found for project_id %s",
+                project_id)
 
     async def get_user_statistic_by_id(
         self, static_id: str
