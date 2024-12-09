@@ -1,10 +1,13 @@
 import asyncio
 import json
 import logging
-from aiokafka import AIOKafkaConsumer, KafkaError
 from typing import Optional
 
+from aiokafka import AIOKafkaConsumer, KafkaError
+import aiokafka
+
 logger = logging.getLogger(__name__)
+
 
 class KafkaConsumer:
     def __init__(
@@ -36,7 +39,9 @@ class KafkaConsumer:
         logger.info("Kafka consumer started")
 
     async def consume_messages(self):
-        logger.debug("Starting to consume messages from Kafka topic: %s", self.topic)
+        logger.debug(
+            "Starting to consume messages from Kafka topic: %s", self.topic
+        )
         try:
             async for message in self.consumer:
                 logger.info(
@@ -76,34 +81,71 @@ class KafkaConsumer:
             task_status = task_data.get("status")
             task_user_id = task_data.get("user_id")
 
-            if project_id is None or task_status is None or task_user_id is None:
-                logger.error("Missing required fields in task_data: %s", task_data)
+            if (
+                project_id is None
+                or task_status is None
+                or task_user_id is None
+            ):
+                logger.error(
+                    "Missing required fields in task_data: %s", task_data
+                )
                 return
 
             logger.info("Received user_id: %s", task_user_id)
 
-            await self.update_statistics(project_id=project_id,
-                                         task_status=task_status,
-                                         task_user_id=task_user_id,
-                                         event_type=event_type)
+            await self.update_statistics(
+                project_id=project_id,
+                task_status=task_status,
+                task_user_id=task_user_id,
+                event_type=event_type,
+                task_data=task_data,
+            )
 
         except json.JSONDecodeError as e:
             logger.error("JSON decode error: %s", e)
         except KafkaError as e:
             logger.error("Kafka error: %s", e)
 
-    async def update_statistics(self, project_id: int, task_status: str, task_user_id: int, event_type: str):
+    async def update_statistics(
+        self,
+        project_id: int,
+        task_status: str,
+        task_user_id: int,
+        event_type: str,
+        task_data,
+    ):
         if event_type in ["task_created", "task_updated"]:
-            logger.info("Updating statistics for project_id: %s, status: %s",
-                        project_id, task_status)
-            await self.user_db.save_or_update_user_statistic(project_id, task_status)
-            await self.project_db.save_or_update_project_statistic(project_id=project_id, task_status=task_status)
-            await self.user_project_db.update_statistics(user_id=task_user_id, project_id=project_id, status=task_status)
+            logger.info(
+                "Updating statistics for project_id: %s, status: %s",
+                project_id,
+                task_status,
+            )
+            await self.user_db.save_or_update_user_statistic(
+                project_id, task_status
+            )
+            await self.project_db.save_or_update_project_statistic(
+                project_id=project_id, task_status=task_status
+            )
+            await self.user_project_db.update_statistics(
+                user_id=task_user_id, project_id=project_id, status=task_status
+            )
         elif event_type == "task_deleted":
-            logger.info("Deleting statistics for task_id: %s", task_data["task_id"])
-            await self.delete_statistics(project_id, task_data["task_id"], task_user_id)
+            logger.info(
+                "Deleting statistics for task_id: %s", task_data["task_id"]
+            )
+            await self.delete_statistics(
+                project_id, task_data["task_id"], task_user_id
+            )
 
-    async def delete_statistics(self, project_id: int, task_id: str, task_user_id: int):
-        await self.project_db.delete_project_statistic_for_task(project_id, task_id)
-        await self.user_db.delete_user_statistic(project_id=project_id, task_status=task_status)
-        await self.user_project_db.delete_user_project_statistic(user_id=task_user_id, project_id=project_id)
+    async def delete_statistics(
+        self, project_id: int, task_id: str, task_user_id: int
+    ):
+        await self.project_db.delete_project_statistic_for_task(
+            project_id, task_id
+        )
+        await self.user_db.delete_user_statistic(
+            project_id=project_id, task_status=task_status
+        )
+        await self.user_project_db.delete_user_project_statistic(
+            user_id=task_user_id, project_id=project_id
+        )

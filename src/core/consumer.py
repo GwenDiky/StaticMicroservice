@@ -2,14 +2,11 @@ import logging
 
 import motor.motor_asyncio
 
-from src.core.config import setup_logging
 from src.core.kafka_consumer import KafkaConsumer
 from src.services.project_static_service import ProjectStatisticService
 from src.services.user_project_static_service import \
     UserProjectStatisticService
 from src.services.user_static_service import UserStatisticService
-
-setup_logging()
 
 logger = logging.getLogger(__name__)
 
