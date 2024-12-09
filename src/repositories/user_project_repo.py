@@ -4,13 +4,17 @@ from datetime import datetime
 
 class AbstractUserProjectStaticsRepository(ABC):
     @abstractmethod
-    async def update_task(self, user_id: int, project_id: int, status: str):
+    async def is_statistic_exists(self, user_id, project_id):
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_statistics(self, user_id: int, project_id: int, status: str):
         raise NotImplementedError
 
     @abstractmethod
     async def get_completed_tasks_count(self, user_id: int, project_id: int,
                                         start_date: datetime,
-                                        end_date: datetime):
+                                        end_date: datetime) -> int:
         raise NotImplementedError
 
     @abstractmethod
@@ -19,12 +23,12 @@ class AbstractUserProjectStaticsRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update_existing_stat(self, stat_id: str, tasks_completed: int,
+    async def update_existing_entry(self, stat_id: str, tasks_completed: int,
                                    end_date: datetime):
         raise NotImplementedError
 
     @abstractmethod
-    async def create_new_stat(self, user_id: int, project_id: int,
+    async def create_statistic_entry(self, user_id: int, project_id: int,
                               is_task_completed: bool):
         raise NotImplementedError
 
