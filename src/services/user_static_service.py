@@ -13,14 +13,13 @@ from src.core.config import setup_logging
 from src.repositories.user_repo import AbstractStaticsRepository
 from src.schemas.project_schema import ProjectStatisticSchema
 from src.schemas.user_schema import UserStatisticSchema
+from src.core.enums import StatusChoices
+
+import logging
+from pymongo.errors import OperationFailure
+from fastapi import HTTPException
 
 setup_logging()
-
-
-class StatusChoices(Enum):
-    DONE = "Done"
-    IN_PROGRESS = "In Progress"
-    TO_DO = "To Do"
 
 
 class UserStatisticService(AbstractStaticsRepository):
@@ -28,11 +27,6 @@ class UserStatisticService(AbstractStaticsRepository):
         self.client = client
         self.db = self.client.get_database("statics")
         self.collection = self.db["user_statics"]
-
-    import logging
-    from pymongo.errors import OperationFailure
-    from fastapi import HTTPException
-
     async def save_or_update_user_statistic(self, project_id: int,
                                             task_status: str):
         try:
@@ -185,3 +179,65 @@ class UserStatisticService(AbstractStaticsRepository):
         )
 
         return total_time / len(completed_tasks)
+
+    async def handle_task_deletion(self, project_id: int, task_status: str):
+        try:
+            logging.info(
+                "Handling task deletion for project %s with status %s",
+                project_id, task_status)
+
+            project = await self.collection.find_one(
+                {"project_id": project_id})
+
+            if not project:
+                logging.warning("No statistics found for project_id %s",
+                                project_id)
+                return
+
+            tasks_by_status = project.get("tasks_by_status",
+                                          {"in_progress": 0, "done": 0,
+                                           "to_do": 0})
+            total_tasks = project.get("total_tasks", 0)
+
+            if total_tasks > 0:
+                total_tasks -= 1
+
+            average_task_completion_time = project.get(
+                "average_task_completion_time", 0.0)
+
+            if task_status == StatusChoices.DONE.value:
+                tasks = await self.get_tasks_for_project(project_id)
+                average_task_completion_time = await self.calculate_average_task_completion_time(
+                    tasks)
+
+            updated_project_stat = ProjectStatisticSchema(
+                project_id=project_id,
+                total_tasks=total_tasks,
+                total_user=project.get("total_user", 0),
+                tasks_by_status=tasks_by_status,
+                average_task_completion_time=average_task_completion_time,
+            )
+
+            update_result = await self.collection.update_one(
+                {"project_id": project_id},
+                {"$set": updated_project_stat.dict()},
+            )
+
+            if update_result.matched_count > 0:
+                logging.info(
+                    "Project statistics updated after task deletion for project_id %s",
+                    project_id)
+            else:
+                logging.warning("No statistics updated for project_id %s",
+                                project_id)
+
+        except OperationFailure as e:
+            logging.error("Error handling task deletion for project_id %s: %s",
+                          project_id, e)
+            raise HTTPException(status_code=500,
+                                detail="Database update error")
+
+    async def get_tasks_for_project(self, project_id: int) -> list:
+        tasks = await self.collection.find(
+            {"project_id": project_id}).to_list()
+        return tasks

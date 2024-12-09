@@ -6,6 +6,9 @@ from pymongo.errors import OperationFailure
 from src import exceptions
 from src.repositories.project_repo import AbstractProjectStaticsRepository
 from src.schemas.project_schema import ProjectStatisticSchema
+from collections import defaultdict
+from fastapi import HTTPException
+from pymongo.errors import OperationFailure
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +78,6 @@ class ProjectStatisticService(AbstractProjectStaticsRepository):
             logger.error("Error updating project statistic: %s", e)
             raise exceptions.DatabaseUpdateError
 
-    from collections import defaultdict
-    from fastapi import HTTPException
-    from pymongo.errors import OperationFailure
 
     async def save_or_update_project_statistic(self, project_id: int,
                                                task_status: str):
@@ -147,7 +147,7 @@ class ProjectStatisticService(AbstractProjectStaticsRepository):
             {"$set": updated_project_stat.dict()},
         )
 
-    def calculate_average_completion_time(self, completed_tasks):
+    async def calculate_average_completion_time(self, completed_tasks):
         if not completed_tasks:
             return 0.0
 

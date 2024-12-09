@@ -92,3 +92,25 @@ class UserProjectStatisticService(AbstractUserProjectStaticsRepository):
             tasks_completed_last_week=1 if is_task_completed else 0,
         )
         await self.collection.insert_one(new_stat.dict())
+
+    async def has_other_tasks_in_project(self, user_id: int,
+                                         project_id: int) -> bool:
+        tasks = await self.collection.find(
+            {"user_id": user_id, "project_id": project_id}).to_list(None)
+        return len(tasks) > 0
+
+    async def delete_user_project_statistic(self, user_id: int,
+                                              project_id: int):
+        remaining_stats = await self.collection.find(
+            {"user_id": user_id}).to_list(None)
+
+        if not remaining_stats:
+            result = await self.collection.delete_one(
+                {"user_id": user_id, "project_id": project_id})
+
+            if result.deleted_count > 0:
+                logger.info(
+                    f"Deleted user statistics for user_id {user_id} and project_id {project_id}")
+            else:
+                logger.warning(
+                    f"No statistics found to delete for user_id {user_id} and project_id {project_id}")

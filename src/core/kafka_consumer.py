@@ -109,9 +109,31 @@ class KafkaConsumer:
                 logger.info(
                     "Deleting static for task_id: %s", task_data["task_id"]
                 )
-                await self.user_db.delete_user_statics_for_task(
+
+                logger.info("Edited static for project_static")
+                await self.project_db.delete_user_statics_for_task(
                     project_id, task_data["task_id"]
                 )
+
+                logger.info("Successfully deleted static for project_static")
+
+                logger.info("Edited static for user_static")
+                await self.user_db.handle_task_deletion(
+                    project_id=project_id,
+                    task_status=task_status,
+                )
+                logger.info("Successfully deleted static for user_static")
+
+                logger.info("Edited static for user_project_static")
+                await self.user_project_db.delete_user_project_statistic(
+                    user_id=task_user_id,
+                    project_id=project_id,
+                )
+                logger.info(
+                    "Successfully deleted static (if needed) for "
+                    "user_project_static"
+                )
+
                 logger.info(
                     "Statics deleted for task_id: %s", task_data["task_id"]
                 )
