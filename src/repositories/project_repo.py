@@ -3,7 +3,7 @@ from datetime import datetime
 
 class AbstractProjectStaticsRepository(ABC):
     @abstractmethod
-    async def delete_user_statics_for_task(self, project_id, task_id):
+    async def delete_project_statistic_for_task(self, project_id, task_id):
         raise NotImplementedError
 
     @abstractmethod
@@ -12,7 +12,7 @@ class AbstractProjectStaticsRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def create_new_project_statistic(self, project_id: int,
+    async def create_project_statistic(self, project_id: int,
                                            task_status: str):
         raise NotImplementedError
 
