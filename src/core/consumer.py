@@ -10,6 +10,7 @@ from src.services.user_project_static_service import \
 from src.services.user_static_service import UserStatisticService
 
 setup_logging()
+
 logger = logging.getLogger(__name__)
 
 

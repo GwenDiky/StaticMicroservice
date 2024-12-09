@@ -3,7 +3,7 @@ from datetime import datetime
 
 class AbstractProjectStaticsRepository(ABC):
     @abstractmethod
-    async def delete_project_statistic_for_task(self, project_id, task_id):
+    async def delete_project_statistic(self, project_id, task_id):
         raise NotImplementedError
 
     @abstractmethod

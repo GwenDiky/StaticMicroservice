@@ -22,7 +22,7 @@ class ProjectStatisticService(AbstractProjectStaticsRepository):
         self.db = self.client.get_database("statics")
         self.collection = self.db["project_statics"]
 
-    async def delete_project_statistic_for_task(self, project_id, task_id):
+    async def delete_project_statistic(self, project_id, task_id):
         try:
             logger.info("Removing task %s from project %s", task_id,
                         project_id)

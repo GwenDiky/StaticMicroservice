@@ -158,7 +158,7 @@ class UserStatisticService(AbstractStaticsRepository):
 
         return total_time / len(completed_tasks)
 
-    async def handle_task_deletion(self, project_id: int, task_status: str):
+    async def delete_user_statistic(self, project_id: int, task_status: str):
         try:
             logging.info(
                 "Handling task deletion for project %s with status %s",
