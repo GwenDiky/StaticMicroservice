@@ -8,7 +8,6 @@ import aiokafka
 
 logger = logging.getLogger(__name__)
 
-
 class KafkaConsumer:
     def __init__(
         self,
@@ -77,34 +76,62 @@ class KafkaConsumer:
             else:
                 logger.info("Didn't receive task data")
 
-            project_id = task_data.get("project_id")
-            task_status = task_data.get("status")
-            task_user_id = task_data.get("user_id")
-
-            if (
-                project_id is None
-                or task_status is None
-                or task_user_id is None
+            if not all(
+                key in task_data for key in ["project_id", "status", "user_id"]
             ):
-                logger.error(
-                    "Missing required fields in task_data: %s", task_data
-                )
+                logger.error("Missing required fields in task_data: %s", task_data)
                 return
 
-            logger.info("Received user_id: %s", task_user_id)
-
-            await self.update_statistics(
-                project_id=project_id,
-                task_status=task_status,
-                task_user_id=task_user_id,
-                event_type=event_type,
-                task_data=task_data,
-            )
+            event_handler = getattr(self, f"handle_{event_type}", None)
+            if callable(event_handler):
+                await event_handler(task_data)
+            else:
+                logger.warning("Unhandled event type: %s", event_type)
 
         except json.JSONDecodeError as e:
             logger.error("JSON decode error: %s", e)
         except KafkaError as e:
             logger.error("Kafka error: %s", e)
+
+    async def handle_task_created(self, task_data):
+        project_id = task_data["project_id"]
+        task_status = task_data["status"]
+        task_user_id = task_data["user_id"]
+        logger.info(
+            "Handling task_created: project_id=%s, status=%s",
+            project_id,
+            task_status,
+        )
+        await self.update_statistics(
+            project_id, task_status, task_user_id, "task_created", task_data
+        )
+
+    async def handle_task_updated(self, task_data):
+        project_id = task_data["project_id"]
+        task_status = task_data["status"]
+        task_user_id = task_data["user_id"]
+        logger.info(
+            "Handling task_updated: project_id=%s, status=%s",
+            project_id,
+            task_status,
+        )
+        await self.update_statistics(
+            project_id, task_status, task_user_id, "task_updated", task_data
+        )
+
+    async def handle_task_deleted(self, task_data):
+        project_id = task_data["project_id"]
+        task_user_id = task_data["user_id"]
+        task_id = task_data.get("task_id")
+        if not task_id:
+            logger.error("task_id is missing in task_data for task_deleted")
+            return
+        logger.info(
+            "Handling task_deleted: project_id=%s, task_id=%s",
+            project_id,
+            task_id,
+        )
+        await self.delete_statistics(project_id, task_id, task_user_id)
 
     async def update_statistics(
         self,
@@ -149,3 +176,4 @@ class KafkaConsumer:
         await self.user_project_db.delete_user_project_statistic(
             user_id=task_user_id, project_id=project_id
         )
+
